@@ -1,0 +1,717 @@
+import nodemailer from "nodemailer";
+import { render } from "@react-email/components";
+import React from "react";
+import OfferLetterEmail from "../../emails/OfferLetterEmail.js";
+import ReminderEmail from "../../emails/ReminderEmail.js";
+import DocumentNotificationEmail from "../../emails/DocumentNotificationEmail.js";
+import DocumentSignedEmail from "../../emails/DocumentSignedEmail.js";
+import DocumentDeclinedEmail from "../../emails/DocumentDeclinedEmail.js";
+import StatusUpdateEmail from "../../emails/StatusUpdateEmail.js";
+import LateArrivalEmail from "../../emails/LateArrivalEmail.js";
+import AbsentNotificationEmail from "../../emails/AbsentNotificationEmail.js";
+/**
+ * Email Service - Handles all email-related business logic
+ */
+
+class EmailService {
+  /**
+   * Create reusable email transporter
+   * @returns {Object} Email transporter
+   */
+  createTransporter() {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: parseInt(process.env.SMTP_PORT) || 587,
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+
+  /**
+   * Base send email function
+   * @param {Object} options - Email options
+   * @param {string} options.to - Recipient email
+   * @param {string} options.subject - Email subject
+   * @param {string} options.html - HTML content
+   * @param {string} options.text - Plain text content (optional)
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendEmail({ to, subject, html, text }) {
+    try {
+      const transporter = this.createTransporter();
+
+      const mailOptions = {
+        from: `"${process.env.FROM_NAME || "Techxudo OMS"}" <${
+          process.env.FROM_EMAIL || process.env.SMTP_USER
+        }>`,
+        to,
+        subject,
+        html,
+        text: text || "",
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+
+      console.log(`✅ Email sent successfully to ${to}: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error(`❌ Error sending email to ${to}:`, error.message);
+      throw new Error(`Failed to send email: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send offer letter email using React Email
+   * @param {Object} offerData - Offer details
+   * @param {string} token - Onboarding token
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendOfferLetterEmail(offerData, token) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+      // Render React component to HTML
+      const html = await render(
+        React.createElement(OfferLetterEmail, {
+          offerData,
+          token,
+          frontendUrl,
+        })
+      );
+
+      // Generate plain text version
+      const { fullName, designation, department, salary, joiningDate } =
+        offerData;
+      const onboardingUrl = `${frontendUrl}/onboarding/${token}`;
+
+      const formattedSalary = new Intl.NumberFormat("en-PK", {
+        style: "currency",
+        currency: "PKR",
+        minimumFractionDigits: 0,
+      }).format(salary);
+
+      const formattedDate = new Date(joiningDate).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      const text = `
+Congratulations, ${fullName}!
+
+We are pleased to offer you the position of ${designation} at Techxudo.
+
+Offer Details:
+- Position: ${designation}
+- Department: ${department || "To be assigned"}
+- Salary: ${formattedSalary} per month
+- Joining Date: ${formattedDate}
+
+To review and respond to this offer, please visit:
+${onboardingUrl}
+
+This link will expire in 7 days.
+
+Best regards,
+Techxudo HR Team
+      `.trim();
+
+      await this.sendEmail({
+        to: offerData.email,
+        subject: "🎉 Offer Letter - Welcome to Techxudo",
+        html,
+        text,
+      });
+
+      console.log(`📧 Offer letter sent to ${offerData.email}`);
+      return {
+        success: true,
+        message: `Offer letter sent to ${offerData.email}`,
+      };
+    } catch (error) {
+      console.error("Error sending offer letter:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send reminder email using React Email
+   * @param {Object} offerData - Offer details
+   * @param {string} token - Onboarding token
+   * @param {string} reminderType - Type of reminder (first, second, final)
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendReminderEmail(offerData, token, reminderType) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+      // Render React component to HTML
+      const html = await render(
+        React.createElement(ReminderEmail, {
+          offerData,
+          token,
+          frontendUrl,
+          reminderType,
+        })
+      );
+
+      const reminderSubjects = {
+        first: "⏰ Reminder: Your Offer Letter is Waiting",
+        second: "⏰ Reminder: 2 Days Left to Respond",
+        final: "⚠️ Final Reminder: Offer Expires Tomorrow",
+      };
+
+      const subject = reminderSubjects[reminderType] || reminderSubjects.first;
+
+      // Generate plain text version
+      const { fullName, designation } = offerData;
+      const onboardingUrl = `${frontendUrl}/onboarding/${token}`;
+
+      const reminderMessages = {
+        first: "You still have 4 days to respond",
+        second: "Only 2 days remaining!",
+        final: "This is your final reminder - expires in 24 hours!",
+      };
+
+      const urgency = reminderMessages[reminderType] || reminderMessages.first;
+
+      const text = `
+Hi ${fullName},
+
+We noticed you haven't responded to your offer letter for the ${designation} position yet.
+
+${urgency}
+
+Please visit: ${onboardingUrl}
+
+If you have any questions, please contact us.
+
+Best regards,
+Techxudo HR Team
+      `.trim();
+
+      await this.sendEmail({
+        to: offerData.email,
+        subject,
+        html,
+        text,
+      });
+
+      console.log(`📧 ${reminderType} reminder sent to ${offerData.email}`);
+      return {
+        success: true,
+        message: `${reminderType} reminder sent to ${offerData.email}`,
+      };
+    } catch (error) {
+      console.error(`Error sending ${reminderType} reminder:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send document notification email to employee using React Email
+   * @param {Object} employee - Employee details
+   * @param {Object} admin - Admin who sent the document
+   * @param {Object} document - Document details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendDocumentNotification(employee, admin, document) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+      // Render React component to HTML
+      const html = await render(
+        React.createElement(DocumentNotificationEmail, {
+          employee,
+          admin,
+          document,
+          frontendUrl,
+        })
+      );
+
+      // Generate plain text version
+      const text = `
+Hi ${employee.fullName},
+
+${admin.fullName} has sent you a ${document.type.toUpperCase()} titled "${document.title}" for your signature.
+
+Document Details:
+- Type: ${document.type.toUpperCase()}
+- Title: ${document.title}
+- Sent by: ${admin.fullName} (${admin.email})
+- Sent on: ${new Date(document.sentAt).toLocaleString()}
+
+This is a legally binding document. Please review carefully before signing.
+
+To view and sign the document, visit:
+${frontendUrl}/employee/documents/${document._id}/sign
+
+If you have any questions, please contact ${admin.fullName} at ${admin.email}.
+
+Best regards,
+Techxudo Office Management System
+      `.trim();
+
+      await this.sendEmail({
+        to: employee.email,
+        subject: `Action Required: Sign Your ${document.type.toUpperCase()} - ${document.title}`,
+        html,
+        text,
+      });
+
+      console.log(`📧 Document notification sent to ${employee.email}`);
+      return {
+        success: true,
+        message: `Document notification sent to ${employee.email}`,
+      };
+    } catch (error) {
+      console.error("Error sending document notification:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send document signed notification email to admin using React Email
+   * @param {Object} admin - Admin to notify
+   * @param {Object} employee - Employee who signed
+   * @param {Object} document - Document details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendDocumentSignedNotification(admin, employee, document) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+      // Render React component to HTML
+      const html = await render(
+        React.createElement(DocumentSignedEmail, {
+          admin,
+          employee,
+          document,
+          frontendUrl,
+        })
+      );
+
+      // Generate plain text version
+      const text = `
+Hi ${admin.fullName},
+
+${employee.fullName} has signed the ${document.type.toUpperCase()} titled "${document.title}".
+
+Signature Details:
+- Signed by: ${employee.fullName} (${employee.email})
+- Document: ${document.title}
+- Signed at: ${new Date(document.signature.signedAt).toLocaleString()}
+
+To download the signed document, visit:
+${frontendUrl}/admin/documents/${document._id}/download
+
+Best regards,
+Techxudo Office Management System
+      `.trim();
+
+      await this.sendEmail({
+        to: admin.email,
+        subject: `Document Signed: ${document.title}`,
+        html,
+        text,
+      });
+
+      console.log(`📧 Document signed notification sent to ${admin.email}`);
+      return {
+        success: true,
+        message: `Document signed notification sent to ${admin.email}`,
+      };
+    } catch (error) {
+      console.error("Error sending document signed notification:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send document declined notification email to admin using React Email
+   * @param {Object} admin - Admin to notify
+   * @param {Object} employee - Employee who declined
+   * @param {Object} document - Document details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendDocumentDeclinedNotification(admin, employee, document) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+      // Render React component to HTML
+      const html = await render(
+        React.createElement(DocumentDeclinedEmail, {
+          admin,
+          employee,
+          document,
+        })
+      );
+
+      // Generate plain text version
+      const text = `
+Hi ${admin.fullName},
+
+${employee.fullName} has declined the ${document.type.toUpperCase()} titled "${document.title}".
+
+Details:
+- Declined by: ${employee.fullName} (${employee.email})
+- Document: ${document.title}
+- Declined at: ${new Date().toLocaleString()}
+- Reason: ${document.rejectionReason || "No reason provided"}
+
+You may want to contact the employee to discuss the matter or create a new document.
+
+Best regards,
+Techxudo Office Management System
+      `.trim();
+
+      await this.sendEmail({
+        to: admin.email,
+        subject: `Document Declined: ${document.title}`,
+        html,
+        text,
+      });
+
+      console.log(`📧 Document declined notification sent to ${admin.email}`);
+      return {
+        success: true,
+        message: `Document declined notification sent to ${admin.email}`,
+      };
+    } catch (error) {
+      console.error("Error sending document declined notification:", error);
+      throw error;
+    }
+  }
+  async sendStatusUpdateEmail(user, type, status, comments) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4080";
+
+      const html = await render(
+        React.createElement(StatusUpdateEmail, {
+          employeeName: user.fullName,
+          requestType: type,
+          status,
+          comments,
+          frontendUrl,
+        })
+      );
+
+      await this.sendEmail({
+        to: user.email,
+        subject: `Update on your ${type} Request`,
+        html,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending status email:", error);
+      // Don't throw, just log, so we don't block the main flow
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send check-in reminder to employee
+   */
+  async sendCheckInReminder(employee) {
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+            .button { background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>⏰ Check-In Reminder</h1>
+            </div>
+            <div class="content">
+              <p>Hello <strong>${employee.fullName}</strong>,</p>
+              <p>This is a friendly reminder to check in for today's attendance.</p>
+              <p>Please check in as soon as you arrive at the office.</p>
+              <a href="${process.env.FRONTEND_URL || "http://localhost:4080"}/employee/attendance" class="button">Check In Now</a>
+              <p>Thank you!</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      await this.sendEmail({
+        to: employee.email,
+        subject: "⏰ Reminder: Please Check In",
+        html,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending check-in reminder:", error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send check-out reminder to employee
+   */
+  async sendCheckOutReminder(employee) {
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+            .button { background: #f5576c; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🏁 Check-Out Reminder</h1>
+            </div>
+            <div class="content">
+              <p>Hello <strong>${employee.fullName}</strong>,</p>
+              <p>Don't forget to check out before leaving!</p>
+              <p>This helps us maintain accurate attendance records.</p>
+              <a href="${process.env.FRONTEND_URL || "http://localhost:4080"}/employee/attendance" class="button">Check Out Now</a>
+              <p>Have a great evening!</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      await this.sendEmail({
+        to: employee.email,
+        subject: "🏁 Reminder: Please Check Out",
+        html,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending check-out reminder:", error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send absentee alert to admins
+   */
+  async sendAbsenteeAlert(absentees, adminEmails) {
+    try {
+      const absenteeList = absentees
+        .map(
+          (emp) =>
+            `<li>${emp.fullName} - ${emp.designation} (${emp.department})</li>`
+        )
+        .join("");
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+            .stats { background: white; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            ul { background: white; padding: 20px 40px; border-radius: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🚨 Absentee Alert</h1>
+            </div>
+            <div class="content">
+              <div class="stats">
+                <h2>📊 Today's Absentees: ${absentees.length}</h2>
+                <p>Date: ${new Date().toLocaleDateString()}</p>
+              </div>
+              <h3>Employee List:</h3>
+              <ul>${absenteeList}</ul>
+              <p><em>This is an automated alert from the Attendance System.</em></p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      for (const adminEmail of adminEmails) {
+        await this.sendEmail({
+          to: adminEmail,
+          subject: `🚨 Absentee Alert - ${absentees.length} employees absent`,
+          html,
+        });
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending absentee alert:", error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send daily attendance report to admins
+   */
+  async sendDailyAttendanceReport(report, adminEmails) {
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+            .stat-card { background: white; padding: 20px; margin: 10px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+            .stat-number { font-size: 32px; font-weight: bold; color: #667eea; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>📊 Daily Attendance Report</h1>
+              <p>${new Date(report.date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+            </div>
+            <div class="content">
+              <div class="stat-card">
+                <div>Total Employees</div>
+                <div class="stat-number">${report.totalEmployees}</div>
+              </div>
+              <div class="stat-card">
+                <div>✅ Present</div>
+                <div class="stat-number" style="color: #10b981;">${report.presentCount}</div>
+              </div>
+              <div class="stat-card">
+                <div>❌ Absent</div>
+                <div class="stat-number" style="color: #ef4444;">${report.absentCount}</div>
+              </div>
+              <div class="stat-card">
+                <div>⏰ Late Arrivals</div>
+                <div class="stat-number" style="color: #f59e0b;">${report.lateCount}</div>
+              </div>
+              <p style="margin-top: 20px;"><em>This is an automated daily report from the Attendance System.</em></p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      for (const adminEmail of adminEmails) {
+        await this.sendEmail({
+          to: adminEmail,
+          subject: `📊 Daily Attendance Report - ${new Date(report.date).toLocaleDateString()}`,
+          html,
+        });
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending daily report:", error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send late arrival notification to employee
+   */
+  async sendLateArrivalNotification(employee, checkInTime, minutesLate) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4080";
+
+      // Format date and time for Pakistan timezone (PKT - UTC+5)
+      const pktDate = new Date(checkInTime.getTime() + 5 * 60 * 60 * 1000);
+      const date = pktDate.toLocaleDateString("en-PK", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const time = pktDate.toLocaleTimeString("en-PK", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      const html = await render(
+        React.createElement(LateArrivalEmail, {
+          employeeName: employee.fullName,
+          checkInTime: time,
+          minutesLate,
+          date,
+          frontendUrl,
+        })
+      );
+
+      await this.sendEmail({
+        to: employee.email,
+        subject: `⏰ Late Arrival Notification - ${minutesLate} minutes late`,
+        html,
+      });
+
+      console.log(`📧 Late arrival notification sent to ${employee.email}`);
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending late arrival notification:", error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send absent notification to employee
+   */
+  async sendAbsentNotification(employee) {
+    try {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4080";
+
+      // Format date for Pakistan timezone (PKT - UTC+5)
+      const now = new Date();
+      const pktDate = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+      const date = pktDate.toLocaleDateString("en-PK", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      const html = await render(
+        React.createElement(AbsentNotificationEmail, {
+          employeeName: employee.fullName,
+          date,
+          frontendUrl,
+        })
+      );
+
+      await this.sendEmail({
+        to: employee.email,
+        subject: `❌ Absent Notification - ${date}`,
+        html,
+      });
+
+      console.log(`📧 Absent notification sent to ${employee.email}`);
+      return { success: true };
+    } catch (error) {
+      console.error("Error sending absent notification:", error);
+      return { success: false };
+    }
+  }
+}
+
+export default new EmailService();
