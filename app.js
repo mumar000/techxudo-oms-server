@@ -22,7 +22,7 @@ app.use(helmet());
 // CORS configuration
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:4080",
+    origin: ["http://localhost:4080", "https://techxudo-oms.netlify.app"],
     credentials: true,
   })
 );
