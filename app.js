@@ -13,6 +13,7 @@ import templateRoutes from "./routes/templateRoutes.js";
 import leaveRoutes from "./routes/leaveRoutes.js";
 import requestRoutes from "./routes/requestRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
+import salaryRoutes from "./routes/salaryRoutes.js";
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/requests", requestRoutes);
 app.use("/api/attendance", attendanceRoutes);
+app.use("/api/salary", salaryRoutes);
 
 // Error handling middleware
 app.use(notFound);
