@@ -31,7 +31,7 @@ export const getMySalaryHistory = async (req, res) => {
       .sort({ year: -1, month: -1 })
       .skip(skip)
       .limit(parseInt(limit))
-      .populate("createdBy updatedBy", "fullName email")
+      .populate("createdBy updatedBy acknowledgedBy", "fullName email")
       .lean();
 
     const total = await SalaryHistory.countDocuments(query);
@@ -67,7 +67,7 @@ export const getMyCurrentSalary = async (req, res) => {
       month: currentMonth,
       year: currentYear
     })
-      .populate("createdBy updatedBy", "fullName email")
+      .populate("createdBy updatedBy acknowledgedBy", "fullName email")
       .lean();
 
     res.json(salary);
@@ -94,6 +94,50 @@ export const getMySalarySummary = async (req, res) => {
     res.json(summary);
   } catch (error) {
     console.error("Error in getMySalarySummary:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * Acknowledge salary entry
+ * POST /api/salary/acknowledge/:id
+ */
+export const acknowledgeSalary = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const salary = await SalaryHistory.findById(id);
+    if (!salary) {
+      return res.status(404).json({ message: "Salary record not found" });
+    }
+
+    // Check if this salary belongs to the current user
+    if (salary.userId.toString() !== userId) {
+      return res.status(403).json({ message: "Not authorized to acknowledge this salary" });
+    }
+
+    // Check if salary can be acknowledged
+    if (!salary.canBeAcknowledged()) {
+      return res.status(400).json({
+        message: "Salary cannot be acknowledged. It may already be acknowledged or not yet paid."
+      });
+    }
+
+    // Acknowledge the salary
+    await salary.acknowledgeSalary(userId);
+
+    // Populate the updated salary for response
+    const updatedSalary = await SalaryHistory.findById(id)
+      .populate("userId", "fullName email designation department")
+      .populate("createdBy updatedBy acknowledgedBy", "fullName email");
+
+    res.json({
+      message: "Salary acknowledged successfully",
+      salary: updatedSalary
+    });
+  } catch (error) {
+    console.error("Error in acknowledgeSalary:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -206,7 +250,7 @@ export const getAllSalaryHistory = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit))
       .populate("userId", "fullName email designation department")
-      .populate("createdBy updatedBy", "fullName email")
+      .populate("createdBy updatedBy acknowledgedBy", "fullName email")
       .lean();
 
     const total = await SalaryHistory.countDocuments(query);
@@ -327,7 +371,7 @@ export const createSalaryEntry = async (req, res) => {
 
     const populatedSalary = await SalaryHistory.findById(salary._id)
       .populate("userId", "fullName email designation department")
-      .populate("createdBy", "fullName email");
+      .populate("createdBy updatedBy acknowledgedBy", "fullName email");
 
     res.status(201).json({
       message: "Salary entry created successfully",
@@ -388,7 +432,7 @@ export const updateSalaryEntry = async (req, res) => {
 
     const updatedSalary = await SalaryHistory.findById(id)
       .populate("userId", "fullName email designation department")
-      .populate("createdBy updatedBy", "fullName email");
+      .populate("createdBy updatedBy acknowledgedBy", "fullName email");
 
     res.json({
       message: "Salary entry updated successfully",

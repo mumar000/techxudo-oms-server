@@ -237,6 +237,19 @@ const salaryHistorySchema = new mongoose.Schema(
       default: ""
     },
 
+    // Employee Acknowledgment
+    acknowledged: {
+      type: Boolean,
+      default: false
+    },
+    acknowledgedAt: {
+      type: Date
+    },
+    acknowledgedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+
     // Audit Trail
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -318,6 +331,19 @@ salaryHistorySchema.methods.lockRecord = function (adminId) {
 // Method to check if editable
 salaryHistorySchema.methods.isEditable = function () {
   return !this.isLocked && this.paymentStatus !== "paid";
+};
+
+// Method to acknowledge salary by employee
+salaryHistorySchema.methods.acknowledgeSalary = function (userId) {
+  this.acknowledged = true;
+  this.acknowledgedAt = new Date();
+  this.acknowledgedBy = userId;
+  return this.save();
+};
+
+// Method to check if employee can acknowledge
+salaryHistorySchema.methods.canBeAcknowledged = function () {
+  return !this.acknowledged && this.paymentStatus === "paid";
 };
 
 // Static method to get salary summary for a user
