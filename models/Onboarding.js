@@ -10,6 +10,12 @@ const onboardingSchema = new mongoose.Schema(
       required: true,
       unique: true
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true
+    },
 
     // Onboarding Token
     token: {
@@ -118,5 +124,9 @@ onboardingSchema.statics.findByToken = async function (token) {
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
   return this.findOne({ token: hashedToken });
 };
+
+// Add organization-based indexes
+onboardingSchema.index({ organizationId: 1, status: 1 });
+onboardingSchema.index({ organizationId: 1, createdAt: -1 });
 
 export default mongoose.model("Onboarding", onboardingSchema);

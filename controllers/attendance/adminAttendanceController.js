@@ -27,7 +27,7 @@ export const getAllAttendance = async (req, res) => {
   try {
     const { userId, startDate, endDate, status, department, page = 1, limit = 50 } = req.query;
 
-    const query = {};
+    const query = { organizationId: req.user.organizationId };
 
     if (userId) {
       query.userId = userId;
@@ -86,7 +86,10 @@ export const getEmployeeAttendance = async (req, res) => {
     const { userId } = req.params;
     const { startDate, endDate, page = 1, limit = 30 } = req.query;
 
-    const query = { userId };
+    const query = {
+      userId,
+      organizationId: req.user.organizationId
+    };
 
     if (startDate && endDate) {
       query.date = {
@@ -143,7 +146,8 @@ export const manualAttendanceEntry = async (req, res) => {
     // Check if attendance already exists
     let attendance = await Attendance.findOne({
       userId,
-      date: attendanceDate
+      date: attendanceDate,
+      organizationId: req.user.organizationId
     });
 
     if (attendance) {
@@ -171,6 +175,9 @@ export const manualAttendanceEntry = async (req, res) => {
         attendance.adminNotes = notes;
       }
 
+      // Ensure organizationId is set
+      attendance.organizationId = req.user.organizationId;
+
       // Recalculate hours if both times present
       if (attendance.checkIn?.time && attendance.checkOut?.time) {
         attendance.calculateHours();
@@ -181,6 +188,7 @@ export const manualAttendanceEntry = async (req, res) => {
       // Create new
       const attendanceData = {
         userId,
+        organizationId: req.user.organizationId,
         date: attendanceDate,
         status: status || "present",
         isManualEntry: true,
@@ -235,7 +243,7 @@ export const updateAttendance = async (req, res) => {
     const adminId = req.user.id;
     const updates = req.body;
 
-    const attendance = await Attendance.findById(id);
+    const attendance = await Attendance.findOne({ _id: id, organizationId: req.user.organizationId });
     if (!attendance) {
       return res.status(404).json({ message: "Attendance not found" });
     }
@@ -286,7 +294,7 @@ export const deleteAttendance = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const attendance = await Attendance.findByIdAndDelete(id);
+    const attendance = await Attendance.findOneAndDelete({ _id: id, organizationId: req.user.organizationId });
     if (!attendance) {
       return res.status(404).json({ message: "Attendance not found" });
     }
@@ -308,11 +316,18 @@ export const getDailyReport = async (req, res) => {
     const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
 
-    // Get all employees
-    const totalEmployees = await User.countDocuments({ role: "employee", isActive: true });
+    // Get all employees in the organization
+    const totalEmployees = await User.countDocuments({
+      role: "employee",
+      isActive: true,
+      organizationId: req.user.organizationId
+    });
 
     // Get attendance for the date
-    const attendances = await Attendance.find({ date: targetDate }).populate(
+    const attendances = await Attendance.find({
+      date: targetDate,
+      organizationId: req.user.organizationId
+    }).populate(
       "userId",
       "fullName designation department"
     );
@@ -379,6 +394,9 @@ export const getWeeklyReport = async (req, res) => {
     if (userId) {
       query.userId = userId;
     }
+
+    // Add organization filter to the query
+    query.organizationId = req.user.organizationId;
 
     const attendances = await Attendance.find(query).populate(
       "userId",
@@ -460,6 +478,9 @@ export const getMonthlyReport = async (req, res) => {
       query.userId = userId;
     }
 
+    // Add organization filter to the query
+    query.organizationId = req.user.organizationId;
+
     const attendances = await Attendance.find(query).populate(
       "userId",
       "fullName designation department"
@@ -507,8 +528,15 @@ export const getDashboardStats = async (req, res) => {
     today.setHours(0, 0, 0, 0);
 
     // Today's stats
-    const totalEmployees = await User.countDocuments({ role: "employee", isActive: true });
-    const todayAttendances = await Attendance.find({ date: today });
+    const totalEmployees = await User.countDocuments({
+      role: "employee",
+      isActive: true,
+      organizationId: req.user.organizationId
+    });
+    const todayAttendances = await Attendance.find({
+      date: today,
+      organizationId: req.user.organizationId
+    });
 
     const presentToday = todayAttendances.filter(
       (a) => a.status === "present" || a.status === "late"
@@ -523,7 +551,8 @@ export const getDashboardStats = async (req, res) => {
     // This month's stats
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthAttendances = await Attendance.find({
-      date: { $gte: monthStart, $lte: today }
+      date: { $gte: monthStart, $lte: today },
+      organizationId: req.user.organizationId
     });
 
     const avgAttendanceRate =
@@ -558,7 +587,7 @@ export const getCorrectionRequests = async (req, res) => {
   try {
     const { status } = req.query;
 
-    const query = {};
+    const query = { organizationId: req.user.organizationId };
     if (status) {
       query.status = status;
     }
@@ -590,7 +619,7 @@ export const reviewCorrectionRequest = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const request = await AttendanceRequest.findById(id);
+    const request = await AttendanceRequest.findOne({ _id: id, organizationId: req.user.organizationId });
     if (!request) {
       return res.status(404).json({ message: "Request not found" });
     }
@@ -613,7 +642,8 @@ export const reviewCorrectionRequest = async (req, res) => {
 
       let attendance = await Attendance.findOne({
         userId: request.userId,
-        date: attendanceDate
+        date: attendanceDate,
+        organizationId: req.user.organizationId
       });
 
       if (attendance) {
@@ -630,6 +660,7 @@ export const reviewCorrectionRequest = async (req, res) => {
         // Create new
         attendance = await Attendance.create({
           userId: request.userId,
+          organizationId: req.user.organizationId,
           date: attendanceDate,
           checkIn: request.requestedCheckIn
             ? { time: request.requestedCheckIn, method: "manual" }
@@ -668,11 +699,13 @@ export const reviewCorrectionRequest = async (req, res) => {
  */
 export const getSettings = async (req, res) => {
   try {
-    let settings = await AttendanceSettings.findOne();
+    let settings = await AttendanceSettings.findOne({ organizationId: req.user.organizationId });
 
     if (!settings) {
-      // Create default settings
-      settings = await AttendanceSettings.create({});
+      // Create default settings for this organization
+      settings = await AttendanceSettings.create({
+        organizationId: req.user.organizationId
+      });
     }
 
     res.json(settings);
@@ -684,14 +717,17 @@ export const getSettings = async (req, res) => {
 
 export const updateSettings = async (req, res) => {
   try {
-    let settings = await AttendanceSettings.findOne();
+    let settings = await AttendanceSettings.findOne({ organizationId: req.user.organizationId });
 
     if (!settings) {
-      settings = await AttendanceSettings.create(req.body);
+      settings = await AttendanceSettings.create({
+        ...req.body,
+        organizationId: req.user.organizationId
+      });
     } else {
       // Update settings - use findOneAndUpdate to handle nested objects properly
       settings = await AttendanceSettings.findOneAndUpdate(
-        {},
+        { organizationId: req.user.organizationId },
         { $set: req.body },
         { new: true, runValidators: true }
       );

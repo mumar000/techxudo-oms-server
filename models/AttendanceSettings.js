@@ -2,6 +2,15 @@ import mongoose from "mongoose";
 
 const attendanceSettingsSchema = new mongoose.Schema(
   {
+    // Organization reference to make settings organization-specific
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      unique: true, // Each organization can only have one set of settings
+      index: true
+    },
+
     // Office Timing Configuration
     workingDays: {
       type: [String],

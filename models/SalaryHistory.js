@@ -7,7 +7,13 @@ const salaryHistorySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true
+      index: true,
+    },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true,
     },
 
     // Salary Period
@@ -16,19 +22,19 @@ const salaryHistorySchema = new mongoose.Schema(
       required: true,
       min: 1,
       max: 12,
-      index: true
+      index: true,
     },
     year: {
       type: Number,
       required: true,
-      index: true
+      index: true,
     },
 
     // Base Salary
     baseSalary: {
       type: Number,
       required: true,
-      default: 0
+      default: 0,
     },
 
     // Allowances & Bonuses
@@ -44,20 +50,20 @@ const salaryHistorySchema = new mongoose.Schema(
             "mobile",
             "travel",
             "special",
-            "other"
+            "other",
           ],
-          required: true
+          required: true,
         },
         amount: {
           type: Number,
           required: true,
-          default: 0
+          default: 0,
         },
         description: {
           type: String,
-          default: ""
-        }
-      }
+          default: "",
+        },
+      },
     ],
 
     // Bonuses & Increments
@@ -72,55 +78,55 @@ const salaryHistorySchema = new mongoose.Schema(
             "festival",
             "referral",
             "retention",
-            "other"
+            "other",
           ],
-          required: true
+          required: true,
         },
         amount: {
           type: Number,
           required: true,
-          default: 0
+          default: 0,
         },
         description: {
           type: String,
-          default: ""
+          default: "",
         },
         date: {
           type: Date,
-          default: Date.now
-        }
-      }
+          default: Date.now,
+        },
+      },
     ],
 
     // Increments (Permanent Salary Increase)
     increment: {
       previousSalary: {
         type: Number,
-        default: 0
+        default: 0,
       },
       newSalary: {
         type: Number,
-        default: 0
+        default: 0,
       },
       incrementAmount: {
         type: Number,
-        default: 0
+        default: 0,
       },
       incrementPercentage: {
         type: Number,
-        default: 0
+        default: 0,
       },
       effectiveDate: {
-        type: Date
+        type: Date,
       },
       reason: {
         type: String,
-        default: ""
+        default: "",
       },
       approvedBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
-      }
+        ref: "User",
+      },
     },
 
     // Deductions
@@ -137,74 +143,74 @@ const salaryHistorySchema = new mongoose.Schema(
             "late-fine",
             "absent-deduction",
             "damages",
-            "other"
+            "other",
           ],
-          required: true
+          required: true,
         },
         amount: {
           type: Number,
           required: true,
-          default: 0
+          default: 0,
         },
         description: {
           type: String,
-          default: ""
-        }
-      }
+          default: "",
+        },
+      },
     ],
 
     // Attendance-based Calculations
     attendanceDetails: {
       totalWorkingDays: {
         type: Number,
-        default: 0
+        default: 0,
       },
       presentDays: {
         type: Number,
-        default: 0
+        default: 0,
       },
       absentDays: {
         type: Number,
-        default: 0
+        default: 0,
       },
       lateDays: {
         type: Number,
-        default: 0
+        default: 0,
       },
       halfDays: {
         type: Number,
-        default: 0
+        default: 0,
       },
       overtimeHours: {
         type: Number,
-        default: 0
+        default: 0,
       },
       overtimeAmount: {
         type: Number,
-        default: 0
-      }
+        default: 0,
+      },
     },
 
     // Calculated Totals
     totalAllowances: {
       type: Number,
-      default: 0
+      default: 0,
     },
     totalBonuses: {
       type: Number,
-      default: 0
+      default: 0,
     },
     totalDeductions: {
       type: Number,
-      default: 0
+      default: 0,
     },
     grossSalary: {
       type: Number,
-      default: 0
+      default: 0,
     },
     netSalary: {
       type: Number,
-      default: 0
+      default: 0,
     },
 
     // Payment Details
@@ -212,67 +218,67 @@ const salaryHistorySchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "processing", "paid", "hold", "cancelled"],
       default: "pending",
-      index: true
+      index: true,
     },
     paymentDate: {
-      type: Date
+      type: Date,
     },
     paymentMethod: {
       type: String,
       enum: ["bank-transfer", "cash", "cheque", "online"],
-      default: "bank-transfer"
+      default: "bank-transfer",
     },
     transactionId: {
       type: String,
-      default: ""
+      default: "",
     },
 
     // Admin Notes
     notes: {
       type: String,
-      default: ""
+      default: "",
     },
     adminNotes: {
       type: String,
-      default: ""
+      default: "",
     },
 
     // Employee Acknowledgment
     acknowledged: {
       type: Boolean,
-      default: false
+      default: false,
     },
     acknowledgedAt: {
-      type: Date
+      type: Date,
     },
     acknowledgedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
+      ref: "User",
     },
 
     // Audit Trail
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
+      ref: "User",
     },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
+      ref: "User",
     },
     isLocked: {
       type: Boolean,
-      default: false // Once locked, cannot be edited
+      default: false, // Once locked, cannot be edited
     },
     lockedAt: {
-      type: Date
+      type: Date,
     },
     lockedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
-    }
+      ref: "User",
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
@@ -347,13 +353,16 @@ salaryHistorySchema.methods.canBeAcknowledged = function () {
 };
 
 // Static method to get salary summary for a user
-salaryHistorySchema.statics.getUserSalarySummary = async function (userId, year) {
+salaryHistorySchema.statics.getUserSalarySummary = async function (
+  userId,
+  year
+) {
   return this.aggregate([
     {
       $match: {
         userId: mongoose.Types.ObjectId(userId),
-        year: year || new Date().getFullYear()
-      }
+        year: year || new Date().getFullYear(),
+      },
     },
     {
       $group: {
@@ -363,9 +372,9 @@ salaryHistorySchema.statics.getUserSalarySummary = async function (userId, year)
         totalDeductions: { $sum: "$totalDeductions" },
         totalBonuses: { $sum: "$totalBonuses" },
         averageNetSalary: { $avg: "$netSalary" },
-        monthCount: { $sum: 1 }
-      }
-    }
+        monthCount: { $sum: 1 },
+      },
+    },
   ]);
 };
 

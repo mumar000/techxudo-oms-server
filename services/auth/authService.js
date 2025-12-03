@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../../models/User.js";
+import Organization from "../../models/Organization.js";
 import UserService from "../user/userService.js";
 
 /**
@@ -10,15 +11,19 @@ class AuthService {
   /**
    * Generate JWT Access Token
    * @param {Object} user - User object
+   * @param {Object} options - Additional token data
    * @returns {string} Access token
    */
-  generateAccessToken(user) {
+  generateAccessToken(user, options = {}) {
     return jwt.sign(
       {
         id: user._id,
         fullName: user.fullName,
         role: user.role,
         email: user.email,
+        organizationId: user.organizationId,
+        setupCompleted: options.setupCompleted,
+        organizationSlug: options.organizationSlug,
       },
       process.env.JWT_SECRET,
       { expiresIn: "15m" } // Short-lived access token
@@ -62,8 +67,20 @@ class AuthService {
       throw new Error("Invalid credentials");
     }
 
-    // Generate tokens
-    const accessToken = this.generateAccessToken(user);
+    // Fetch organization data to get setupCompleted status
+    let setupCompleted = true; // Default for employees
+    let organizationSlug = null;
+
+    if (user.organizationId) {
+      const organization = await Organization.findById(user.organizationId).select('setupCompleted slug');
+      if (organization) {
+        setupCompleted = organization.setupCompleted || false;
+        organizationSlug = organization.slug;
+      }
+    }
+
+    // Generate tokens with organization data
+    const accessToken = this.generateAccessToken(user, { setupCompleted, organizationSlug });
     const refreshToken = this.generateRefreshToken(user);
 
     // Save refresh token to database
@@ -106,8 +123,20 @@ class AuthService {
         throw new Error("Invalid refresh token");
       }
 
-      // Generate new access token
-      const newAccessToken = this.generateAccessToken(user);
+      // Fetch organization data to get setupCompleted status
+      let setupCompleted = true;
+      let organizationSlug = null;
+
+      if (user.organizationId) {
+        const organization = await Organization.findById(user.organizationId).select('setupCompleted slug');
+        if (organization) {
+          setupCompleted = organization.setupCompleted || false;
+          organizationSlug = organization.slug;
+        }
+      }
+
+      // Generate new access token with organization data
+      const newAccessToken = this.generateAccessToken(user, { setupCompleted, organizationSlug });
 
       return {
         success: true,

@@ -9,6 +9,12 @@ const attendanceRequestSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true
+    },
 
     // Reference to existing attendance (if correcting)
     attendanceId: {
@@ -79,5 +85,10 @@ const attendanceRequestSchema = new mongoose.Schema(
 // Index for efficient queries
 attendanceRequestSchema.index({ userId: 1, createdAt: -1 });
 attendanceRequestSchema.index({ status: 1, createdAt: -1 });
+
+// Organization-based indexes
+attendanceRequestSchema.index({ organizationId: 1, userId: 1 });
+attendanceRequestSchema.index({ organizationId: 1, status: 1 });
+attendanceRequestSchema.index({ organizationId: 1, createdAt: -1 });
 
 export default mongoose.model("AttendanceRequest", attendanceRequestSchema);

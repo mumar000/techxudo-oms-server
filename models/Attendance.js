@@ -9,6 +9,12 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true
+    },
     date: {
       type: Date,
       required: true,
@@ -158,8 +164,13 @@ const attendanceSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for unique attendance per user per day
-attendanceSchema.index({ userId: 1, date: 1 }, { unique: true });
+// Compound index for unique attendance per user per day within an organization
+attendanceSchema.index({ userId: 1, date: 1, organizationId: 1 }, { unique: true });
+
+// Index for efficient organization-based queries
+attendanceSchema.index({ organizationId: 1, userId: 1 });
+attendanceSchema.index({ organizationId: 1, date: 1 });
+attendanceSchema.index({ organizationId: 1, status: 1 });
 
 // Index for efficient queries
 attendanceSchema.index({ status: 1, createdAt: -1 });

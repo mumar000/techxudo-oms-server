@@ -66,9 +66,13 @@ export const checkIn = async (req, res) => {
       userId
     );
 
+    // Get user's organization ID
+    const user = await User.findById(userId).select('organizationId');
+
     // Create attendance record
     const attendance = await Attendance.create({
       userId,
+      organizationId: user.organizationId,
       date: today,
       checkIn: {
         time: checkInTime,
@@ -162,6 +166,11 @@ export const checkOut = async (req, res) => {
       location: location || {},
       notes: notes || "",
     };
+    // Ensure organizationId is set if not already present (for existing records)
+    if (!attendance.organizationId) {
+      const user = await User.findById(userId).select('organizationId');
+      attendance.organizationId = user.organizationId;
+    }
 
     // Calculate hours worked
     attendance.calculateHours();
@@ -303,8 +312,12 @@ export const requestCorrection = async (req, res) => {
       return res.status(400).json({ message: "Invalid request type" });
     }
 
+    // Get user's organization ID
+    const user = await User.findById(userId).select('organizationId');
+
     const correctionRequest = await AttendanceRequest.create({
       userId,
+      organizationId: user.organizationId,
       attendanceId,
       requestType,
       requestedDate: new Date(requestedDate),

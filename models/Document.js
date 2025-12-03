@@ -35,6 +35,14 @@ const documentSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Organization Reference
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true
+    },
+
     // Status
     status: {
       type: String,

@@ -6,7 +6,7 @@ import emailService from "../../services/email/emailService.js";
 
 // Helper function to escape special regex characters
 const escapeRegExp = (string) => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
 // Create document from template
@@ -29,7 +29,6 @@ export const createDocumentFromTemplateService = async (
   }
 
   // Get admin (document creator) for email
-  const admin = await User.findById(userId);
 
   // Replace placeholders in content
   let content = template.content;
@@ -43,6 +42,12 @@ export const createDocumentFromTemplateService = async (
     });
   }
 
+  // Get the admin user to extract organization
+  const admin = await User.findById(userId);
+  if (!admin || !admin.organizationId) {
+    throw new Error("Admin user or organization not found");
+  }
+
   // Create document
   const document = new Document({
     title: template.name,
@@ -50,6 +55,7 @@ export const createDocumentFromTemplateService = async (
     content: content,
     createdBy: userId,
     sentTo: employeeId,
+    organizationId: admin.organizationId,
     status: "sent", // Set as sent since it will be sent to the employee
     sentAt: new Date(),
   });
@@ -89,8 +95,11 @@ export const uploadDocumentService = async (
     throw new Error("Employee not found");
   }
 
-  // Get admin (document creator) for email
+  // Get admin (document creator) for email and organization
   const admin = await User.findById(userId);
+  if (!admin || !admin.organizationId) {
+    throw new Error("Admin user or organization not found");
+  }
 
   const document = new Document({
     title: title || "Custom Document",
@@ -99,6 +108,7 @@ export const uploadDocumentService = async (
     pdfUrl: pdfUrl || "",
     createdBy: userId,
     sentTo: employeeId,
+    organizationId: admin.organizationId,
     status: "sent",
     sentAt: new Date(),
   });
@@ -126,7 +136,13 @@ export const uploadDocumentService = async (
 
 // Get all documents for a user
 export const getDocumentsService = async (userId, userRole, options = {}) => {
-  let query = {};
+  // Get the user to extract organization
+  const user = await User.findById(userId);
+  if (!user || !user.organizationId) {
+    throw new Error("User or organization not found");
+  }
+
+  let query = { organizationId: user.organizationId };
 
   // Admin can see all documents they created, employee can see documents sent to them
   if (userRole === "admin") {
@@ -146,18 +162,30 @@ export const getDocumentsService = async (userId, userRole, options = {}) => {
     .sort({ createdAt: -1 });
 
   // Process template variables for each document
-  await Promise.all(documents.map(async (document) => {
-    if (document.sentTo) {
-      document.content = await processDocumentTemplate(document, document.sentTo);
-    }
-  }));
+  await Promise.all(
+    documents.map(async (document) => {
+      if (document.sentTo) {
+        document.content = await processDocumentTemplate(
+          document,
+          document.sentTo
+        );
+      }
+    })
+  );
 
   return documents;
 };
 
 // Get pending documents for employee
 export const getPendingDocumentsService = async (userId) => {
+  // Get the user to extract organization
+  const user = await User.findById(userId);
+  if (!user || !user.organizationId) {
+    throw new Error("User or organization not found");
+  }
+
   const documents = await Document.find({
+    organizationId: user.organizationId,
     sentTo: userId,
     status: { $in: ["sent", "viewed"] }, // Documents that are not yet signed or rejected
   })
@@ -166,25 +194,42 @@ export const getPendingDocumentsService = async (userId) => {
     .sort({ createdAt: -1 });
 
   // Process template variables for each document
-  await Promise.all(documents.map(async (document) => {
-    if (document.sentTo) {
-      document.content = await processDocumentTemplate(document, document.sentTo);
-    }
-  }));
+  await Promise.all(
+    documents.map(async (document) => {
+      if (document.sentTo) {
+        document.content = await processDocumentTemplate(
+          document,
+          document.sentTo
+        );
+      }
+    })
+  );
 
   return documents;
 };
 
 // Get document by ID
-export const getDocumentByIdService = async (documentId) => {
-  const document = await Document.findById(documentId)
+export const getDocumentByIdService = async (documentId, userId) => {
+  // Get the user to extract organization
+  const user = await User.findById(userId);
+  if (!user || !user.organizationId) {
+    throw new Error("User or organization not found");
+  }
+
+  const document = await Document.findOne({
+    _id: documentId,
+    organizationId: user.organizationId
+  })
     .populate("createdBy", "fullName email role")
     .populate("sentTo", "fullName email role");
 
   if (document) {
     // Process template variables using the populated recipient user data
     if (document.sentTo) {
-      document.content = await processDocumentTemplate(document, document.sentTo);
+      document.content = await processDocumentTemplate(
+        document,
+        document.sentTo
+      );
     }
   }
 
@@ -213,10 +258,19 @@ export const signDocumentService = async (
   userId,
   signatureData
 ) => {
-  const document = await Document.findById(documentId);
+  // Get the user to extract organization
+  const user = await User.findById(userId);
+  if (!user || !user.organizationId) {
+    throw new Error("User or organization not found");
+  }
+
+  const document = await Document.findOne({
+    _id: documentId,
+    organizationId: user.organizationId
+  });
 
   if (!document) {
-    throw new Error("Document not found");
+    throw new Error("Document not found or not in your organization");
   }
 
   // Check if document can be signed (not already signed/rejected/expired)
@@ -366,8 +420,11 @@ export const deleteDocumentService = async (documentId, userId) => {
 };
 
 // Process template placeholders in document content
-export const processDocumentTemplate = async (document, recipientUser = null) => {
-  let content = document.content || '';
+export const processDocumentTemplate = async (
+  document,
+  recipientUser = null
+) => {
+  let content = document.content || "";
 
   // If no recipient provided, return content as-is
   if (!recipientUser) {
@@ -377,51 +434,59 @@ export const processDocumentTemplate = async (document, recipientUser = null) =>
   // Map common template variables to user properties
   const templateData = {
     // User basic information
-    'employee_name': recipientUser.fullName || '',
-    'name': recipientUser.fullName || '',
-    'full_name': recipientUser.fullName || '',
+    employee_name: recipientUser.fullName || "",
+    name: recipientUser.fullName || "",
+    full_name: recipientUser.fullName || "",
 
     // User role and position
-    'position': recipientUser.designation || '',
-    'designation': recipientUser.designation || '',
-    'role': recipientUser.role || '',
+    position: recipientUser.designation || "",
+    designation: recipientUser.designation || "",
+    role: recipientUser.role || "",
 
     // User contact information
-    'email': recipientUser.email || '',
-    'phone': recipientUser.phone || '',
+    email: recipientUser.email || "",
+    phone: recipientUser.phone || "",
 
     // Employment details
-    'department': recipientUser.department || '',
-    'joining_date': recipientUser.joiningDate ? new Date(recipientUser.joiningDate).toLocaleDateString() : '',
-    'salary': recipientUser.salary ? `Rs. ${recipientUser.salary.toLocaleString()}` : '',
-    'monthly_salary': recipientUser.salary ? `Rs. ${recipientUser.salary.toLocaleString()}` : '',
-    'cnic': recipientUser.cnic || '',
+    department: recipientUser.department || "",
+    joining_date: recipientUser.joiningDate
+      ? new Date(recipientUser.joiningDate).toLocaleDateString()
+      : "",
+    salary: recipientUser.salary
+      ? `Rs. ${recipientUser.salary.toLocaleString()}`
+      : "",
+    monthly_salary: recipientUser.salary
+      ? `Rs. ${recipientUser.salary.toLocaleString()}`
+      : "",
+    cnic: recipientUser.cnic || "",
 
     // Personal details
-    'date_of_birth': recipientUser.dateOfBirth ? new Date(recipientUser.dateOfBirth).toLocaleDateString() : '',
+    date_of_birth: recipientUser.dateOfBirth
+      ? new Date(recipientUser.dateOfBirth).toLocaleDateString()
+      : "",
 
     // Address details
-    'address': recipientUser.address?.street || '',
-    'city': recipientUser.address?.city || '',
-    'state': recipientUser.address?.state || '',
-    'zip_code': recipientUser.address?.zipCode || '',
-    'country': recipientUser.address?.country || '',
+    address: recipientUser.address?.street || "",
+    city: recipientUser.address?.city || "",
+    state: recipientUser.address?.state || "",
+    zip_code: recipientUser.address?.zipCode || "",
+    country: recipientUser.address?.country || "",
 
     // Company related (for now using placeholder, in a real system you'd fetch company data)
-    'company_name': process.env.COMPANY_NAME || 'TechXudo',
-    'company_address': process.env.COMPANY_ADDRESS || '123 Business St, City',
-    'date': new Date().toLocaleDateString(),
-    'current_date': new Date().toLocaleDateString(),
-    'timestamp': new Date().toLocaleString(),
+    company_name: process.env.COMPANY_NAME || "TechXudo",
+    company_address: process.env.COMPANY_ADDRESS || "123 Business St, City",
+    date: new Date().toLocaleDateString(),
+    current_date: new Date().toLocaleDateString(),
+    timestamp: new Date().toLocaleString(),
   };
 
   // Replace all placeholders in content
-  Object.keys(templateData).forEach(key => {
+  Object.keys(templateData).forEach((key) => {
     const placeholder = `{{${key}}}`;
-    const value = templateData[key] || '';
+    const value = templateData[key] || "";
 
     // Create a global regex to replace all occurrences of the placeholder
-    const regex = new RegExp(escapeRegExp(placeholder), 'g');
+    const regex = new RegExp(escapeRegExp(placeholder), "g");
     content = content.replace(regex, value);
   });
 
